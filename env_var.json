@@ -2,5 +2,8 @@
     "eye_data_path": "./single_eye",
     "train_image_dir_path": "./IMG",
     "train_mask_dir_path": "./MASK",
-    "eval_image_dir_path": "./IMG_Eval"
+    "train_model_dir_path": "./Model",
+    "train_data_num": 2,
+    "eval_image_dir_path": "./IMG_Eval",
+    "eval_model_path": "./maskrcnn.pth"
 }

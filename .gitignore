@@ -1,6 +1,8 @@
 single_eye/
 IMG/
 MASK/
+Model/
+*.pth
 
 build/
 dist/
