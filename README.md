@@ -6,5 +6,7 @@ http://iris.di.ubi.pt/ubipr.html
 python iris_train_data_seperation.py
 
 # [Mask R CNN Train]
+python iris_segmentation.py Train
 
 # [Iris Detection]
+python iris_segmentation.py

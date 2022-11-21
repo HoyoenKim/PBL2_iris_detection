@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import numpy as np
+from datetime import datetime
 import torch
 import torchvision
 from torchvision import transforms as T
@@ -9,6 +10,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
+from torchvision.utils import save_image
 from PIL import Image
 
 sys.path.append('./detection')
@@ -19,14 +21,37 @@ with open("./env_var.json", "r") as env_var_json:
     env_var = json.load(env_var_json)
     image_train_dir_path = env_var['train_image_dir_path']
     mask_train_dir_path = env_var['train_mask_dir_path']
+    
     train_data_num = env_var['train_data_num']
+    num_of_epoch = env_var['num_of_epoch']
+    
+    train_model_dir_path = env_var['train_model_dir_path']
+    eval_image_dir_path = env_var['eval_image_dir_path']
+
+    eval_model_path = env_var['eval_model_path']
+    if not os.path.exists(train_model_dir_path):
+            print('----------------------------------')
+            print('There is no saving model dir, ... generate.')
+            print('----------------------------------')
+            os.mkdir(train_model_dir_path)
+
+    if not os.path.exists(eval_image_dir_path):
+        print('-----------------------------------')
+        print('There is no detection img dir, ... generate.')
+        print('-----------------------------------')
+        os.mkdir(eval_image_dir_path)
+
     print('### image_train_dir_path : ', image_train_dir_path)
     print('### mask_train_dir_path : ', mask_train_dir_path)
     print('### train_data_num : ', train_data_num)
+    print('### num_of_epoch : ', num_of_epoch)
+    print('### train_model_dir_path : ', train_model_dir_path)
+    print('### eval_image_dir_path : ', eval_image_dir_path)
+    print('### eval_model_path : ', eval_model_path)
 
 class TrainDataset(torch.utils.data.Dataset):
     def __init__(self, image_path, mask_path, transforms):
-        self.imge_path = image_path
+        self.image_path = image_path
         self.mask_path = mask_path
         self.transforms = transforms
         self.imgs = list(sorted(os.listdir(image_path)))
@@ -106,9 +131,28 @@ class TrainDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.imgs)
 
+class EvalDataset(torch.utils.data.Dataset):
+    def __init__(self, image_path, transforms):
+        self.image_path = image_path
+        self.transforms = transforms
+        self.imgs = list(sorted(os.listdir(image_path)))
+
+    def __getitem__(self, idx):
+        # load images and masks
+        img_path = os.path.join(self.image_path, self.imgs[idx])
+        img = Image.open(img_path).convert("RGB")
+
+        if self.transforms is not None:
+            img = self.transforms(img)
+
+        return img
+
+    def __len__(self):
+        return len(self.imgs)
+
 def get_model_instance_segmentation(num_classes):
     # load an instance segmentation model pre-trained on COCO
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(weights="DEFAULT")
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
 
     # get number of input features for the classifier
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -139,16 +183,23 @@ if __name__ == '__main__':
     # our dataset has two classes only - background and person
     num_classes = 4
 
-    train = True
-    if train:
+    mode = 'Eval'
+    try: 
+        if sys.argv[1] == 'Train':
+            mode = 'Train'
+        print('Defalut Mode : Train')
+    except:
+        print('Defalut Mode : Eval')
+
+    if mode == 'Train':
         # load dataset
         dataset = TrainDataset(image_train_dir_path, mask_train_dir_path, get_transform(train=True))
         dataset_test = TrainDataset(image_train_dir_path, mask_train_dir_path, get_transform(train=False))
         
         # split the dataset in train and test set
         indices = torch.randperm(len(dataset)).tolist()
-        dataset = torch.utils.data.Subset(dataset, indices[:8500])
-        dataset_test = torch.utils.data.Subset(dataset_test, indices[8500:])
+        dataset = torch.utils.data.Subset(dataset, indices[:2])
+        dataset_test = torch.utils.data.Subset(dataset_test, indices[2:])
         
         # define training and validation data loaders
         data_loader = torch.utils.data.DataLoader(
@@ -172,7 +223,7 @@ if __name__ == '__main__':
                                                        step_size=3,
                                                        gamma=0.1)
         # let's train it for 10 epochs
-        num_epochs = 10
+        num_epochs = num_of_epoch
         for epoch in range(num_epochs):
             # train for one epoch, printing every 10 iterations
             train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
@@ -180,3 +231,37 @@ if __name__ == '__main__':
             lr_scheduler.step()
             # evaluate on the test dataset
             evaluate(model, data_loader_test, device=device)
+        
+        now = datetime.now()
+        model_name = 'maskrcnn_' + str(now) + '.pth'
+        model_path = os.path.join(train_model_dir_path, model_name)
+        torch.save(model, model_path)
+        print('Trained model is saved at ', model_path)
+
+    elif mode == 'Eval':
+        model = get_model_instance_segmentation(num_classes)
+        if torch.cuda.is_available():
+            model = torch.load(eval_model_path)
+        else:
+            model = torch.load(eval_model_path, map_location=torch.device('cpu'))
+        model.to(device)
+
+        dataset = EvalDataset(eval_image_dir_path, get_transform(train=False))
+        data_loader = torch.utils.data.DataLoader(
+         dataset, batch_size=2, shuffle=True, num_workers=4,
+         collate_fn=utils.collate_fn)
+
+        # TODO For inference
+        model.eval()
+        images = next(iter(data_loader))
+        if torch.cuda.is_available():
+            images = list(image for image in images)
+        else:
+            images = list(torch.stack(list(image), dim=0) for image in images)
+
+        # Returns predictions
+        predictions = model(images)          
+        print(predictions)
+
+        saver = predictions[0]['masks']
+        save_image(saver, './test.png')

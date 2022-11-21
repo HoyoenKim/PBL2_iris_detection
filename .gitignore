@@ -2,7 +2,9 @@ single_eye/
 IMG/
 MASK/
 Model/
+IMG_Eval/
 *.pth
+*.png
 
 build/
 dist/
