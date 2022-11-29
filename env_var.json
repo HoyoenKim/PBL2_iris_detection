@@ -6,5 +6,5 @@
     "train_data_num": 8500,
     "num_of_epoch": 10,
     "eval_image_dir_path": "./IMG_Eval",
-    "eval_model_path": "./maskrcnn.pth"
+    "eval_model_path": "./maskrcnn_50.pth"
 }

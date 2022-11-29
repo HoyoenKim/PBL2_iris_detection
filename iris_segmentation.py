@@ -180,6 +180,9 @@ def get_transform(train):
 if __name__ == '__main__':
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    print('-------------------')
+    print('device : ', device)
+    print('-------------------')
     # our dataset has two classes only - background and person
     num_classes = 4
 
@@ -239,13 +242,13 @@ if __name__ == '__main__':
         print('Trained model is saved at ', model_path)
 
     elif mode == 'Eval':
-        model = get_model_instance_segmentation(num_classes)
+        #model = get_model_instance_segmentation(num_classes)
         if torch.cuda.is_available():
             model = torch.load(eval_model_path)
         else:
             model = torch.load(eval_model_path, map_location=torch.device('cpu'))
-        model.to(device)
-
+        #model.to(device)
+        model.to(torch.device('cpu'))
         dataset = EvalDataset(eval_image_dir_path, get_transform(train=False))
         data_loader = torch.utils.data.DataLoader(
          dataset, batch_size=2, shuffle=True, num_workers=4,
@@ -254,14 +257,15 @@ if __name__ == '__main__':
         # TODO For inference
         model.eval()
         images = next(iter(data_loader))
-        if torch.cuda.is_available():
-            images = list(image for image in images)
-        else:
-            images = list(torch.stack(list(image), dim=0) for image in images)
+        #if torch.cuda.is_available():
+        #    images = list(image for image in images)
+        #else:
+        #    images = list(torch.stack(list(image), dim=0) for image in images)
 
+        images = list(torch.stack(list(image), dim=0) for image in images)
         # Returns predictions
         predictions = model(images)          
         print(predictions)
 
-        saver = predictions[0]['masks']
+        saver = predictions[0]['masks'][0]
         save_image(saver, './test.png')
